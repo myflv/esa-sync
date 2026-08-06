@@ -1,0 +1,18 @@
+{
+  "api_token": "填你的 Cloudflare API Token",
+  "zone_id": "",
+  "target_domain": "你的域名",
+  "target_subdomain": "你的子域名",
+  "source_domain": "esa的cname地址",
+  "probe_base_url": "https://dns.alidns.com/resolve",
+  "subnets": [
+    {
+      "region": "上海电信",
+      "ecs": "116.228.0.0/24"
+    }
+  ],
+  "keep_top_n": 4,
+  "ttl": 300,
+  "interval_sec": 300,
+  "http_timeout_sec": 15
+}

@@ -1,0 +1,14 @@
+services:
+  esa-sync:
+    image: ghcr.io/myflv/esa-sync:latest
+    container_name: esa-sync
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./config.json:/app/config.json:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

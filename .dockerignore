@@ -1,0 +1,5 @@
+esa-sync
+*.exe
+*.test
+.git
+.gitignore
