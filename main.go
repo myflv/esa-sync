@@ -19,12 +19,14 @@ const recordType = "A"
 // dnsTypeA alidns DoH 响应中 A 记录的类型码。
 const dnsTypeA = 1
 
-// ptr 返回指向 bool 值的指针（SDK 字段用）。
-func ptr(b bool) *bool { return &b }
+// timeoutFor 返回配置中的 HTTP 超时。
+func timeoutFor(c *Config) time.Duration {
+	return time.Duration(c.HTTPTimeoutSec) * time.Second
+}
 
-// httpClient 返回带超时的共享 HTTP 客户端（probe 与 CF SDK 共用）。
+// httpClient 返回带超时的共享 HTTP 客户端（probe 共用，复用连接池）。
 func httpClient(c *Config) *http.Client {
-	return &http.Client{Timeout: time.Duration(c.HTTPTimeoutSec) * time.Second}
+	return &http.Client{Timeout: timeoutFor(c)}
 }
 
 // Subnet config: one telecom region.
@@ -34,17 +36,19 @@ type Subnet struct {
 }
 
 type Config struct {
-	APIToken       string   `json:"api_token"`        // Cloudflare API Token (Zone.DNS Edit 权限)
-	ZoneID         string   `json:"zone_id"`          // Cloudflare zone ID，留空则按 target_domain 自动查
-	TargetDomain   string   `json:"target_domain"`    // Cloudflare zone 的根域名，如 100172.xyz
-	TargetSubDomain string  `json:"target_subdomain"` // 要写入的主机记录/子域，如 esa；空=根域@
-	SourceDomain   string   `json:"source_domain"`    // 查询源：xin.myflv.cn.a1.initbb.com
-	ProbeBaseURL   string   `json:"probe_base_url"`
-	Subnets        []Subnet `json:"subnets"`
-	KeepTopN       int      `json:"keep_top_n"`
-	TTL            int      `json:"ttl"`
-	IntervalSec    int      `json:"interval_sec"`
-	HTTPTimeoutSec int      `json:"http_timeout_sec"`
+	AccessKey       string   `json:"access_key"`       // 华为云 AK
+	SecretKey       string   `json:"secret_key"`       // 华为云 SK
+	Region          string   `json:"region"`           // 华为云区域（DNS 按区域鉴权），如 cn-east-3/cn-north-4
+	ZoneID          string   `json:"zone_id"`          // 华为云公网域名 zone ID，留空则按 target_domain 自动查
+	TargetDomain    string   `json:"target_domain"`    // 华为云 zone 的根域名，如 cname.100172.xyz
+	TargetSubDomain string   `json:"target_subdomain"` // 要写入的主机记录/子域，如 esa；空=根域
+	SourceDomain    string   `json:"source_domain"`    // 查询源：dev.myflv.cn.a1.initbb.com
+	ProbeBaseURL    string   `json:"probe_base_url"`   // 默认 https://dns.alidns.com/resolve
+	Subnets         []Subnet `json:"subnets"`
+	KeepTopN        int      `json:"keep_top_n"`
+	TTL             int      `json:"ttl"`
+	IntervalSec     int      `json:"interval_sec"`
+	HTTPTimeoutSec  int      `json:"http_timeout_sec"`
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -59,6 +63,9 @@ func loadConfig(path string) (*Config, error) {
 	if c.ProbeBaseURL == "" {
 		c.ProbeBaseURL = "https://dns.alidns.com/resolve"
 	}
+	if c.Region == "" {
+		c.Region = "cn-north-4"
+	}
 	if c.KeepTopN == 0 {
 		c.KeepTopN = 4
 	}
@@ -71,8 +78,8 @@ func loadConfig(path string) (*Config, error) {
 	if c.HTTPTimeoutSec == 0 {
 		c.HTTPTimeoutSec = 15
 	}
-	if c.APIToken == "" || c.TargetDomain == "" || c.SourceDomain == "" {
-		return nil, fmt.Errorf("config 必填项缺失: api_token/target_domain/source_domain 不能为空")
+	if c.AccessKey == "" || c.SecretKey == "" || c.TargetDomain == "" || c.SourceDomain == "" {
+		return nil, fmt.Errorf("config 必填项缺失: access_key/secret_key/target_domain/source_domain 不能为空")
 	}
 	return &c, nil
 }
@@ -167,23 +174,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
+	client, err := clientFor(cfg) // 整个进程共享一个华为云客户端
+	if err != nil {
+		log.Fatalf("初始化华为云客户端失败: %v", err)
+	}
 	log.Printf("%s -> %s (间隔=%ds topN=%d)", cfg.SourceDomain, cfg.fqdn(), cfg.IntervalSec, cfg.KeepTopN)
 
 	if *runOnce {
-		if err := runOnceSync(cfg); err != nil {
+		if err := runOnceSync(cfg, client); err != nil {
 			log.Fatalf("同步失败: %v", err)
 		}
 		return
 	}
 
 	// 循环模式：启动即跑一次，然后定时。
-	if err := runOnceSync(cfg); err != nil {
+	if err := runOnceSync(cfg, client); err != nil {
 		log.Printf("[错误] 首轮: %v", err)
 	}
 	ticker := time.NewTicker(time.Duration(cfg.IntervalSec) * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		if err := runOnceSync(cfg); err != nil {
+		if err := runOnceSync(cfg, client); err != nil {
 			log.Printf("[错误] %v", err)
 		}
 	}

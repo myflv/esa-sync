@@ -1,6 +1,16 @@
 # esa-sync
 
-定时用 alidns DoH + ECS 查询上海电信 IP，同步到 Cloudflare DNS 的 `esa.172100.xyz` A 记录。
+定时用 alidns DoH + ECS 查询上海电信 IP，同步到**华为云云解析 DNS** 的 `esa.172100.xyz` A 记录。
+
+## 前置：创建华为云 AK/SK 并授权
+
+1. 在[华为云我的凭证 → 访问密钥](https://console.huaweicloud.com/iam/) 创建并下载 AK/SK 密钥对（妥善保存 SK，之后无法再查看）。
+2. 给该密钥授予云解析 DNS 权限，自定义策略需要：
+   - `dns:zone:list`
+   - `dns:recordset:list`
+   - `dns:recordset:create`
+   - `dns:recordset:update`
+   - `dns:recordset:delete`
 
 ## 配置
 
@@ -8,7 +18,8 @@
 
 ```json
 {
-  "api_token": "你的 Cloudflare API Token (Zone.DNS Edit 权限)",
+  "access_key": "你的华为云 Access Key (AK)",
+  "secret_key": "你的华为云 Secret Access Key (SK)",
   "zone_id": "",
   "target_domain": "172100.xyz",
   "target_subdomain": "esa",
@@ -23,6 +34,8 @@
   "http_timeout_sec": 15
 }
 ```
+
+说明：`zone_id` 留空会自动按 `target_domain` 查询并缓存一次。
 
 ## 本地运行
 

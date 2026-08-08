@@ -1,7 +1,8 @@
 {
-  "api_token": "填你的 Cloudflare API Token",
-  "zone_id": "",
-  "target_domain": "你的域名",
+  "access_key": "填你的华为云 Access Key (AK)",
+  "secret_key": "填你的华为云 Secret Access Key (SK)",
+  "region": "cn-east-3",
+  "target_domain": "你的华为云公网域名",
   "target_subdomain": "你的子域名",
   "source_domain": "esa的cname地址",
   "probe_base_url": "https://dns.alidns.com/resolve",
